@@ -6,7 +6,7 @@
  */
 $host = "dpg-d4mqgk0bdp1s73er2d5g-a";
 $port = "5432";
-$dbname = "marketdata-db";
+$dbname = "marketdata_bj2m";
 $user = "marketdata_bj2m_user";
 $pass = "7SZAbvxo7JhPABRHYcgX6Des8zrZY4Ar";
 
