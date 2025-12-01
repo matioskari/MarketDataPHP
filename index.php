@@ -36,6 +36,7 @@ if (isset($_POST['save'])) {
  */
 function haeOsake($symbol, $api_key) {
     $url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=$symbol&apikey=$api_key";
+
     $opts = [
         "http" => [
             "method" => "GET",
@@ -43,12 +44,23 @@ function haeOsake($symbol, $api_key) {
         ]
     ];
     $context = stream_context_create($opts);
-    // Lue data ja dekoodaa JSON
     $data = @file_get_contents($url, false, $context);
-    if (!$data) return false;
+
+    if ($data === false) {
+        die("<b>API ERROR:</b> file_get_contents returned FALSE.<br>URL: $url");
+    }
+
     $json = json_decode($data, true);
+
+    // DEBUG: Tulosta koko raakavastaus, jotta näemme mikä puuttuu
+    echo "<pre>";
+    echo "DEBUG - API RAW RESPONSE:\n\n";
+    print_r($json);
+    echo "</pre>";
+
     return $json["Global Quote"] ?? false;
 }
+
 
 $quote = null;
 if (isset($_GET['symbol'])) {
