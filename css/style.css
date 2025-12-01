@@ -1,0 +1,27 @@
+.form-row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.inline-form input {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.inline-form button {
+    padding: 10px 15px;
+    font-size: 16px;
+    background: #1e90ff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.inline-form button:hover {
+    opacity: 0.85;
+}
