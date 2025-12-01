@@ -64,8 +64,9 @@ if (empty($dates)) {
         <p class="text-sm text-gray-500 mb-4">
             Näytetään enintään 30 viimeisintä kaupankäyntipäivää (päätöskurssi).
         </p>
-        <canvas id="priceChart" height="120"></canvas>
-        <div class="mt-4">
+<div class="relative h-80"> <!-- n. 320px korkea alue -->
+    <canvas id="priceChart"></canvas>
+</div>        <div class="mt-4">
             <a href="index.php" class="text-blue-600 hover:underline">&larr; Takaisin hakuun</a>
         </div>
     </div>
