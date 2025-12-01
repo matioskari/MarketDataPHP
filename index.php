@@ -1,72 +1,103 @@
 <?php
 /**
  * index.php
- * Pääsivu josta käyttäjä voi hakea osaketietoja AlphaVantage API:sta.
+ * Pääsivu josta käyttäjä voi hakea osaketietoja EODHD API:sta.
  * Tulokset näytetään yksinkertaisessa kortissa ja käyttäjä voi tallentaa
  * löydetyt tiedot paikalliseen tietokantaan `stocks`-tauluun.
  */
 require 'config.php';
 require 'database.php';
 
+$savedMessage = null;
+$errorMessage = null;
+$quote = null;
+
 // Tallennus tietokantaan (POST)
 if (isset($_POST['save'])) {
-    // Valmistele INSERT ja täytä arvot POST-dataa käyttäen
     $stmt = $db->prepare("
         INSERT INTO stocks (symbol, price, change_percent, previous_close, volume)
         VALUES (:symbol, :price, :change_percent, :previous_close, :volume)
     ");
     $stmt->execute([
-        ':symbol' => $_POST['symbol'],
-        ':price' => $_POST['price'],
+        ':symbol'         => $_POST['symbol'],
+        ':price'          => $_POST['price'],
         ':change_percent' => $_POST['change_percent'],
         ':previous_close' => $_POST['previous_close'],
-        ':volume' => $_POST['volume']
+        ':volume'         => $_POST['volume']
     ]);
-    // Viesti käyttäjälle onnistuneesta tallennuksesta
     $savedMessage = "Tallennus onnistui ✔";
 }
 
 /**
  * haeOsake
- * Hakee yhden osakkeen nykyiset tiedot AlphaVantage:n GLOBAL_QUOTE -päätepisteestä.
+ * Hakee yhden osakkeen end-of-day -tiedot EODHD:n EOD-rajapinnasta.
  *
- * @param string $symbol Osakesymboli (esim. 'AAPL')
- * @param string $api_key AlphaVantage API-avain
- * @return array|false Palauttaa 'Global Quote' -assosiatiivisen taulukon tai false
+ * @param string $symbolFull Täysi symboli, esim. "AAPL.US"
+ * @param string $api_key    EODHD API-avain
+ * @return array
+ *   - onnistuessa: AlphaVantage-tyylinen array (01. symbol, 05. price, ...)
+ *   - virheessä: ['error' => 'selite']
  */
-function haeOsake($symbol, $api_key) {
-    $url = "https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=$symbol&apikey=$api_key";
+function haeOsake($symbolFull, $api_key) {
+    // Haetaan EOD (historical end-of-day) -data JSON:ina
+    // Palauttaa taulukon, jossa riveinä päivät (date, open, high, low, close, volume, jne.)
+    $url = "https://eodhd.com/api/eod/{$symbolFull}?api_token={$api_key}&fmt=json&period=d&order=a";
 
-    $opts = [
-        "http" => [
-            "method" => "GET",
-            "header" => "User-Agent: PHP\r\n"
-        ]
-    ];
-    $context = stream_context_create($opts);
-    $data = @file_get_contents($url, false, $context);
-
+    $data = @file_get_contents($url);
     if ($data === false) {
-        die("<b>API ERROR:</b> file_get_contents returned FALSE.<br>URL: $url");
+        return ['error' => 'API-yhteys epäonnistui. EODHD ei vastannut.'];
     }
 
     $json = json_decode($data, true);
 
-    // DEBUG: Tulosta koko raakavastaus, jotta näemme mikä puuttuu
-    echo "<pre>";
-    echo "DEBUG - API RAW RESPONSE:\n\n";
-    print_r($json);
-    echo "</pre>";
+    if (!is_array($json) || empty($json)) {
+        return ['error' => 'EODHD ei palauttanut dataa annetulle symbolille.'];
+    }
 
-    return $json["Global Quote"] ?? false;
+    // Taulukko on nousevassa järjestyksessä: vanhin -> uusin
+    $count = count($json);
+    $last  = $json[$count - 1];              // uusin päivä
+    $prev  = $count > 1 ? $json[$count - 2] : null; // edellinen päivä (jos löytyy)
+
+    $lastClose  = $last['close']  ?? null;
+    $prevClose  = $prev['close']  ?? null;
+    $lastVolume = $last['volume'] ?? null;
+
+    // Lasketaan muutosprosentti (edelliseen päätökseen verrattuna), jos mahdollista
+    $changePercentStr = '-';
+    if ($lastClose !== null && $prevClose !== null && $prevClose != 0) {
+        $change = (($lastClose - $prevClose) / $prevClose) * 100.0;
+        // Esim. "-0.34%" tai "1.25%"
+        $changePercentStr = sprintf('%.2f%%', $change);
+    }
+
+    // Muodostetaan “Global Quote” -tyylinen array, jotta muu koodi voi pysyä samana
+    return [
+        "01. symbol"          => $symbolFull,
+        "05. price"           => $lastClose !== null ? (string)$lastClose : '-',
+        "10. change percent"  => $changePercentStr,
+        "08. previous close"  => $prevClose !== null ? (string)$prevClose : '-',
+        "06. volume"          => $lastVolume !== null ? (string)$lastVolume : '-',
+    ];
 }
 
-
-$quote = null;
+// Haetaan data, jos symbol-parametri on annettu
 if (isset($_GET['symbol'])) {
-    $symbol = strtoupper(trim($_GET['symbol']));
-    // Haetaan data API:sta käyttäen yläpuolella määriteltyä funktiota
-    $quote = haeOsake($symbol, $api_key);
+    // Käyttäjä syöttää esim. "AAPL" → muutetaan "AAPL.US"
+    $inputSymbol = strtoupper(trim($_GET['symbol']));
+    if ($inputSymbol !== '') {
+        $symbolFull = $inputSymbol . '.US';
+        $result = haeOsake($symbolFull, $api_key);
+
+        if (is_array($result) && isset($result['error'])) {
+            $errorMessage = $result['error'];
+            $quote = null;
+        } else {
+            $quote = $result;
+        }
+    } else {
+        $errorMessage = 'Anna osakesymboli, esim. AAPL.';
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -109,6 +140,13 @@ if (isset($_GET['symbol'])) {
             </div>
         <?php endif; ?>
 
+        <!-- Näytä virheilmoitus API:lta -->
+        <?php if (!empty($errorMessage)): ?>
+            <div class="mb-4 text-red-700 bg-red-50 border border-red-100 p-3 rounded">
+                <?= htmlspecialchars($errorMessage) ?>
+            </div>
+        <?php endif; ?>
+
         <!-- Tulokset -->
         <?php if ($quote): ?>
             <?php
@@ -117,14 +155,16 @@ if (isset($_GET['symbol'])) {
             ?>
             <div class="bg-gray-50 p-4 rounded-lg shadow-sm">
                 <div class="flex items-center justify-between">
-                    <h2 class="text-xl font-semibold"><?= htmlspecialchars($quote["01. symbol"] ?? '') ?></h2>
+                    <h2 class="text-xl font-semibold">
+                        <?= htmlspecialchars($quote["01. symbol"] ?? '') ?>
+                    </h2>
                     <div class="<?= $isNegative ? 'text-red-600' : 'text-green-600' ?> font-semibold">
                         <?= htmlspecialchars($quote["10. change percent"] ?? '') ?>
                     </div>
                 </div>
 
                 <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                    <div><span class="font-medium">Hinta:</span> <?= htmlspecialchars($quote["05. price"] ?? '-') ?> USD</div>
+                    <div><span class="font-medium">Hinta (päätös):</span> <?= htmlspecialchars($quote["05. price"] ?? '-') ?> USD</div>
                     <div><span class="font-medium">Volume:</span> <?= htmlspecialchars($quote["06. volume"] ?? '-') ?></div>
                     <div><span class="font-medium">Edellinen close:</span> <?= htmlspecialchars($quote["08. previous close"] ?? '-') ?></div>
                     <div><span class="font-medium">Päiväys:</span> <?= date('Y-m-d H:i') ?></div>
@@ -132,7 +172,9 @@ if (isset($_GET['symbol'])) {
 
                 <div class="mt-4 flex gap-3">
                     <a href="chart.php?symbol=<?= urlencode($quote["01. symbol"] ?? '') ?>" target="_blank"
-                       class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">Graafi</a>
+                       class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600 transition">
+                        Graafi
+                    </a>
 
                     <form method="POST" class="inline">
                         <input type="hidden" name="symbol" value="<?= htmlspecialchars($quote["01. symbol"] ?? '') ?>">
@@ -141,14 +183,20 @@ if (isset($_GET['symbol'])) {
                         <input type="hidden" name="previous_close" value="<?= htmlspecialchars($quote["08. previous close"] ?? '') ?>">
                         <input type="hidden" name="volume" value="<?= htmlspecialchars($quote["06. volume"] ?? '') ?>">
                         <button type="submit" name="save"
-                                class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition">Tallenna</button>
+                                class="bg-green-500 text-white px-4 py-2 rounded-md hover:bg-green-600 transition">
+                            Tallenna
+                        </button>
                     </form>
                 </div>
             </div>
-        <?php elseif (isset($_GET['symbol'])): ?>
-            <div class="text-red-600 bg-red-50 border border-red-100 p-3 rounded">Tietoja ei löytynyt. Tarkista symboli.</div>
+        <?php elseif (isset($_GET['symbol']) && empty($errorMessage)): ?>
+            <div class="text-red-600 bg-red-50 border border-red-100 p-3 rounded">
+                Tietoja ei löytynyt. Tarkista symboli.
+            </div>
         <?php else: ?>
-            <div class="text-gray-600">Hae osakkeen ticker yläpuolelta tai siirry Dashboardiin.</div>
+            <div class="text-gray-600">
+                Hae osakkeen ticker (esim. AAPL) yläpuolelta tai siirry Dashboardiin.
+            </div>
         <?php endif; ?>
 
         <div class="mt-6 text-right text-sm text-gray-500">
