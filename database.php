@@ -4,10 +4,10 @@
  * Yhdistää MySQL-tietokantaan PDO:lla ja asettaa virhetilan poikkeuksiin.
  * Muokkaa yhteysasetuksia tarvittaessa paikalliseen XAMPP/MariaDB-asennukseen.
  */
-$host = "localhost";
-$dbname = "stockpeek";
-$user = "root";
-$pass = "";
+$host = "HOST_FROM_RENDER";
+$dbname = "DB_NAME";
+$user = "DB_USER";
+$pass = "DB_PASSWORD";
 
 try {
     // Luo PDO-yhteys ja aseta ERRMODE poikkeuksiin, jotta virheet ovat

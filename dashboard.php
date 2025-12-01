@@ -78,35 +78,24 @@ foreach ($data as $row) {
                                 </td>
                             </tr>
                         <?php endforeach; ?>
-                    <?php
-                    /**
-                     * dashboard.php
-                     * Näyttää dashboardin, jossa listataan viimeisimmät tallennetut hinnat per symboli
-                     * sekä piirretään pylväsdiagrammi viimeisimmistä hinnoista.
-                     */
-                    require 'database.php';
 
-                    // Poisto toiminto: id saadaan GET-parametrista ja rivin poistamisen jälkeen
-                    // uudelleenohjataan käyttäjä takaisin dashboardiin.
-                    if (isset($_GET['delete'])) {
-                        $id = (int)$_GET['delete'];
-                        $stmt = $db->prepare("DELETE FROM stocks WHERE id = ?");
-                        $stmt->execute([$id]);
-                        header("Location: dashboard.php");
-                        exit;
-                    }
+            <div class="mt-6">
+                <h2 class="text-lg font-semibold mb-2">Viimeisimmät hinnat</h2>
+                <canvas id="dashboardChart"></canvas>
+            </div>
 
-                    // Hae viimeisin tallennus per symbol. Sisäkkäinen JOIN varmistaa, että
-                    // saamme vain kutakin symbolia vastaavan viimeisimmän rivin.
-                    $data = $db->query("\n    SELECT s1.*\n    FROM stocks s1\n    INNER JOIN (\n        SELECT symbol, MAX(saved_at) AS latest\n        FROM stocks\n        GROUP BY symbol\n    ) s2 ON s1.symbol = s2.symbol AND s1.saved_at = s2.latest\n    ORDER BY s1.symbol ASC\n")->fetchAll(PDO::FETCH_ASSOC);
-
-                    $symbols = [];
-                    $prices = [];
-                    foreach ($data as $row) {
-                        $symbols[] = $row['symbol'];
-                        // Muunna hinta liukuluvuksi graafia varten
-                        $prices[] = (float)$row['price'];
-                    }
+            <script>
+            const ctx = document.getElementById('dashboardChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: <?= json_encode($symbols) ?>,
+                    datasets: [{
+                        label: 'Viimeisin hinta USD',
+                        data: <?= json_encode($prices) ?>,
+                        borderWidth: 1,
+                        backgroundColor: 'rgba(59,130,246,0.6)'
+                    }]
                 },
                 options: { responsive: true }
             });
