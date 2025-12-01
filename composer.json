@@ -1,0 +1,8 @@
+{
+  "name": "marketdata/app",
+  "description": "PHP stock market application",
+  "type": "project",
+  "require": {
+    "php": ">=8.0"
+  }
+}
