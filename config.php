@@ -6,5 +6,5 @@
  * erillistä konfiguraatiotiedostoa joka ei ole julkisessa repossa.
  * Hanki ilmainen API-avain: https://www.alphavantage.co/
  */
-$api_key = "OMA_API_KEY_TAHAN";
+$api_key = "AIT9CR16FDHVFKZH";
 ?>
